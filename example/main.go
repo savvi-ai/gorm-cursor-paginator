@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"gorm.io/gorm"
+	_ "gorm.io/gorm/dialects/sqlite"
 	paginator "github.com/pilagod/gorm-cursor-paginator"
 )
 

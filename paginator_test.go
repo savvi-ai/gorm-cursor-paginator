@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/stretchr/testify/suite"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 func TestPaginator(t *testing.T) {
@@ -39,22 +39,31 @@ type paginatorSuite struct {
 /* suite setup */
 
 func (s *paginatorSuite) SetupSuite() {
-	db, err := gorm.Open("postgres", "host=localhost port=8765 dbname=test user=test password=test sslmode=disable")
+	dsn := "test:test@(localhost:3306)/test?charset=utf8mb4&parseTime=True&loc=Local"
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		s.FailNow(err.Error())
 	}
 	s.db = db
 	s.db.AutoMigrate(&order{}, &item{})
-	s.db.Model(&item{}).AddForeignKey("order_id", "orders(id)", "CASCADE", "CASCADE")
+	// s.db.Model(&item{}).Add("order_id", "orders(id)", "CASCADE", "CASCADE")
 }
 
 func (s *paginatorSuite) TearDownTest() {
-	s.db.Exec("TRUNCATE orders, items RESTART IDENTITY;")
+	s.db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	s.db.Exec("TRUNCATE TABLE orders")
+	s.db.Exec("TRUNCATE TABLE items")
+	s.db.Exec("SET FOREIGN_KEY_CHECKS = 1")
+	// s.db.Exec("TRUNCATE orders, items RESTART IDENTITY;")
 }
 
 func (s *paginatorSuite) TearDownSuite() {
-	s.db.DropTable(&item{}, &order{})
-	s.db.Close()
+	s.db.Migrator().DropTable(&item{}, &order{})
+	conn, err := s.db.DB()
+	if err != nil {
+		panic(err)
+	}
+	conn.Close()
 }
 
 /* suite test cases */
@@ -285,8 +294,8 @@ func (s *paginatorSuite) TestPaginateJoinQuery() {
 	cursor = s.paginate(stmt, &i3, pq{
 		Before: cursor.Before,
 	})
-	s.Equal(i1, i3)
-	s.assertOnlyAfter(cursor)
+	s.Nil(cursor.After)
+	s.Nil(cursor.Before)
 }
 
 func (s *paginatorSuite) TestPaginateSpecialCharacter() {
