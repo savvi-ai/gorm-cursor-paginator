@@ -6,8 +6,15 @@ import (
 	"strings"
 
 	"github.com/iancoleman/strcase"
-	"gorm.io/gorm"
 )
+
+type Query interface {
+	Table() string
+	Where(query string, args ...interface{}) Query
+	Limit(int) Query
+	Order(string) Query
+	Select(interface{}) Query
+}
 
 const (
 	defaultLimit = 10
@@ -60,10 +67,10 @@ func (p *Paginator) GetNextCursor() Cursor {
 }
 
 // Paginate paginates data
-func (p *Paginator) Paginate(stmt *gorm.DB, out interface{}) *gorm.DB {
+func (p *Paginator) Paginate(query Query, out interface{}) Query {
 	p.initOptions()
-	p.initTableKeys(stmt, out)
-	result := p.appendPagingQuery(stmt, out).Find(out)
+	p.initTableKeys(query)
+	result := p.appendPagingQuery(query, out).Select(out)
 	// out must be a pointer or gorm will panic above
 	elems := reflect.ValueOf(out).Elem()
 	if elems.Kind() == reflect.Slice && elems.Len() > 0 {
@@ -86,15 +93,13 @@ func (p *Paginator) initOptions() {
 	}
 }
 
-func (p *Paginator) initTableKeys(db *gorm.DB, out interface{}) {
-	db.Statement.Parse(out)
-	table := db.Statement.Table
+func (p *Paginator) initTableKeys(query Query) {
 	for _, key := range p.keys {
-		p.tableKeys = append(p.tableKeys, fmt.Sprintf("%s.%s", table, strcase.ToSnake(key)))
+		p.tableKeys = append(p.tableKeys, fmt.Sprintf("%s.%s", query.Table(), strcase.ToSnake(key)))
 	}
 }
 
-func (p *Paginator) appendPagingQuery(stmt *gorm.DB, out interface{}) *gorm.DB {
+func (p *Paginator) appendPagingQuery(query Query, out interface{}) Query {
 	decoder, _ := NewCursorDecoder(out, p.keys...)
 	var fields []interface{}
 	if p.hasAfterCursor() {
@@ -103,14 +108,14 @@ func (p *Paginator) appendPagingQuery(stmt *gorm.DB, out interface{}) *gorm.DB {
 		fields = decoder.Decode(*p.cursor.Before)
 	}
 	if len(fields) > 0 {
-		stmt = stmt.Where(
+		query = query.Where(
 			p.getCursorQuery(),
 			p.getCursorQueryArgs(fields)...,
 		)
 	}
-	stmt = stmt.Limit(p.limit + 1)
-	stmt = stmt.Order(p.getOrder())
-	return stmt
+	query = query.Limit(p.limit + 1)
+	query = query.Order(p.getOrder())
+	return query
 }
 
 func (p *Paginator) hasAfterCursor() bool {
