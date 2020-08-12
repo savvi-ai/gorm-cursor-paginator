@@ -9,11 +9,13 @@ import (
 )
 
 type Query interface {
+	Model() interface{}
+	Value() interface{}
 	Table() string
 	Where(query string, args ...interface{}) Query
 	Limit(int) Query
 	Order(string) Query
-	Select(interface{}) Query
+	Select() Query
 }
 
 const (
@@ -67,16 +69,16 @@ func (p *Paginator) GetNextCursor() Cursor {
 }
 
 // Paginate paginates data
-func (p *Paginator) Paginate(query Query, out interface{}) Query {
+func (p *Paginator) Paginate(query Query) Query {
 	p.initOptions()
 	p.initTableKeys(query)
-	result := p.appendPagingQuery(query, out).Select(out)
+	p.appendPagingQuery(query).Select()
 	// out must be a pointer or gorm will panic above
-	elems := reflect.ValueOf(out).Elem()
+	elems := reflect.ValueOf(query.Value()).Elem()
 	if elems.Kind() == reflect.Slice && elems.Len() > 0 {
-		p.postProcess(out)
+		p.postProcess(query.Value())
 	}
-	return result
+	return query
 }
 
 /* private */
@@ -99,8 +101,8 @@ func (p *Paginator) initTableKeys(query Query) {
 	}
 }
 
-func (p *Paginator) appendPagingQuery(query Query, out interface{}) Query {
-	decoder, _ := NewCursorDecoder(out, p.keys...)
+func (p *Paginator) appendPagingQuery(query Query) Query {
+	decoder, _ := NewCursorDecoder(query.Model(), p.keys...)
 	var fields []interface{}
 	if p.hasAfterCursor() {
 		fields = decoder.Decode(*p.cursor.After)
